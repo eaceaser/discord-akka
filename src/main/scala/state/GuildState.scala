@@ -8,6 +8,7 @@ import monocle.macros.GenLens
 object GuildState {
   object Optics {
     val presences = GenLens[GuildState](_.presences)
+    val members = GenLens[GuildState](_.members)
   }
 }
 

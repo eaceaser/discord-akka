@@ -99,4 +99,6 @@ object DiscordProtocol extends DefaultJsonProtocol {
   implicit val readyF = jsonFormat7(ReadyPayload)
   implicit val presenceUpdateF = jsonFormat(PresenceUpdatePayload, "user", "status", "roles", "guild_id", "game_id")
   implicit val messageCreateF = jsonFormat(MessageCreatePayload, "tts", "timestamp", "nonce", "mentions", "mention_everyone", "id", "embeds", "edited_timestamp", "content", "channel_id", "author", "attachments")
+
+  implicit val guildMemberAddF = jsonFormat(GuildMemberAddPayload, "user", "roles", "joined_at", "guild_id")
 }

@@ -29,6 +29,7 @@ object Api {
 object ClientActor {
   def props(queue: SourceQueue[Message], listener: ActorRef, authToken: String) = Props(classOf[ClientActor], queue, listener, authToken)
 
+  // data
   sealed trait State
   case object Init extends State
   case object Connected extends State
@@ -46,10 +47,11 @@ object ClientActor {
     val channels = guilds.values.flatMap { _.channels.toSeq }.toMap
   }
 
+  // internal message types
   case class GoToConnected(payload: ReadyPayload, heartbeat: Int)
   case object SendHeartbeat
-
   case class UpdatePresence(seq: Int, p: PresenceUpdatePayload)
+  case class AddMembership(p: GuildMemberAddPayload)
 }
 
 class ClientActor(client: SourceQueue[Message], listener: ActorRef, token: String) extends FSM[ClientActor.State, ClientActor.Data] with ActorSubscriber {
@@ -59,6 +61,7 @@ class ClientActor(client: SourceQueue[Message], listener: ActorRef, token: Strin
   import Api._
   import ClientActor._
   import DiscordProtocol._
+  import messages.Types._
   import context.dispatcher
 
   startWith(Init, Uninitialized)
@@ -111,16 +114,21 @@ class ClientActor(client: SourceQueue[Message], listener: ActorRef, token: Strin
       msg.textStream.runWith(Sink.fold("")(_ + _)).foreach { payload =>
         val m = payload.parseJson.convertTo[ServerMsg]
         m.`type` match {
-          case "PRESENCE_UPDATE" =>
+          case PresenceUpdate =>
             val d = m.data.convertTo[PresenceUpdatePayload]
             self ! UpdatePresence(m.seq, d)
-          case "MESSAGE_CREATE" =>
+          case MessageCreate =>
             val d = m.data.convertTo[MessageCreatePayload]
             val channel = s.channels(d.channelId)
             val msg = Api.Message(channel.name, d.author.username, d.content)
             listener ! msg
+          case TypingStart =>
+            // TODO: Emit this event, I guess.
+          case GuildMemberAdd =>
+            val d = m.data.convertTo[GuildMemberAddPayload]
+            self ! AddMembership(d)
           case x@_ =>
-            // TODO: Log Unhandled Message Here.
+            log.info(s"Received unhandled message type: $x")
         }
       }
       stay
@@ -142,6 +150,14 @@ class ClientActor(client: SourceQueue[Message], listener: ActorRef, token: Strin
           presenceLens.set(Some((newSeq, newPresence)))(s)
       }
 
+      stay using newState
+
+    case Event(AddMembership(p), s: ConnectionState) =>
+      import ConnectionState.Optics._
+      import GuildState.Optics._
+      val lens = guilds composeOptional(index(p.guildId)) composeLens(members) composeLens(at(p.user.id))
+      val newMembership = Membership(deaf=false, joinedAt = p.joinedAt, mute=false, roles=p.roles, user=p.user)
+      val newState = lens.set(Some(newMembership))(s)
       stay using newState
 
     // Public API
