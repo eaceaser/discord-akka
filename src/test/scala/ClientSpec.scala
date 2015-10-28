@@ -31,27 +31,19 @@ class ClientSpec(_sys: ActorSystem) extends TestKit(_sys)
   }
 
   "Discord Client" should "handle a standard payload" in {
-    val dummyQueue = Source.queue[Message](64, OverflowStrategy.fail).to(Sink.ignore).run()
-    val clientProps = ClientActor.props(dummyQueue, testActor, "test")
-    val sink = Sink.actorSubscriber(clientProps)
-    val src = Source.queue[Message](64, OverflowStrategy.fail)
-    val (queue, client) = src.toMat(sink)(Keep.both).run()
-    val messages = readTrace("/traces/basic.txt")
-    val (init, rest) = (messages.head, messages.tail)
+    withTrace("/traces/basic.txt") { (queue, client, rest) =>
+      rest foreach queue.offer
 
-    queue.offer(init)
-    expectMsg(Api.Ready)
-    rest foreach queue.offer
+      val expected = Set("khionu", "ceezy")
+      val msg1 = expectMsgAnyClassOf(classOf[Api.Message])
+      expected should contain(msg1.user)
+      val msg2 = expectMsgAnyClassOf(classOf[Api.Message])
+      expected should contain(msg2.user)
 
-    val expected = Set("khionu", "ceezy")
-    val msg1 = expectMsgAnyClassOf(classOf[Api.Message])
-    expected should contain (msg1.user)
-    val msg2 = expectMsgAnyClassOf(classOf[Api.Message])
-    expected should contain (msg2.user)
-
-    val stateF = (client ? Api.GetState).mapTo[ConnectionState]
-    val state = Await.result(stateF, defaultTimeout)
-    state.guilds.values.head.presences(BigInt(91377040883744768L).underlying)._2.status shouldBe "idle"
+      val stateF = (client ? Api.GetState).mapTo[ConnectionState]
+      val state = Await.result(stateF, defaultTimeout)
+      state.guilds.values.head.presences(BigInt(91377040883744768L).underlying)._2.status shouldBe "idle"
+    }
   }
 
   it should "handle a guild add message" in {
