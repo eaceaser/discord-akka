@@ -3,10 +3,8 @@ package com.tehasdf.discord.model
 import java.math.BigInteger
 import java.time.Instant
 
+import akka.http.scaladsl.model.HttpResponse
 import spray.json.JsValue
-
-import monocle.macros._
-import monocle.std._
 
 sealed trait UserLike {
   val avatar: Option[String]
@@ -60,3 +58,6 @@ case class Guild(
   region: String,
   roles: Seq[Role]) {
 }
+
+case class LoginInfo(email: String, password: String)
+case class Msg(content: String, mentions: Seq[BigInteger], nonce: BigInteger, tts: Boolean)

@@ -1,83 +1,38 @@
 package com.tehasdf.discord
 
-import akka.actor.{ActorRef, Actor, ActorSystem}
-import akka.http.scaladsl.model.ws.{Message, TextMessage}
-import akka.pattern.ask
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.stream.{SourceQueue, ActorMaterializer, OverflowStrategy}
+import akka.actor.ActorSystem
+import akka.http.scaladsl.model.{ContentTypes, StatusCodes, HttpResponse, HttpRequest}
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Flow
 import akka.testkit.TestKit
-import akka.util.Timeout
-import org.scalatest.concurrent.{IntegrationPatience, Eventually}
+import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.{FlatSpecLike, BeforeAndAfterAll}
 
-import scala.collection.immutable
-import scala.concurrent.{Future, Await}
+import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.util.Success
 
-import com.tehasdf.discord.ClientActor.ConnectionState
-import org.scalatest._
-
-class ClientSpec(_sys: ActorSystem) extends TestKit(_sys)
-  with FlatSpecLike with BeforeAndAfterAll with ShouldMatchers with Eventually {
-  implicit val materializer = ActorMaterializer()
-  implicit val iTimeout = Timeout(5 seconds)
-  val defaultTimeout = 5 seconds
-
+class ClientSpec(_sys: ActorSystem) extends TestKit(_sys) with FlatSpecLike with BeforeAndAfterAll with ShouldMatchers {
   def this() = this(ActorSystem("discord-akka-test"))
 
+  implicit val materializer = ActorMaterializer()
   import system.dispatcher
+
+  val token = "test test test"
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
-  "Discord Client" should "handle a standard payload" in {
-    withTrace("/traces/basic.txt") { (queue, client, rest) =>
-      rest foreach queue.offer
 
-      val expected = Set("khionu", "ceezy")
-      val msg1 = expectMsgAnyClassOf(classOf[Api.Message])
-      expected should contain(msg1.user)
-      val msg2 = expectMsgAnyClassOf(classOf[Api.Message])
-      expected should contain(msg2.user)
-
-      val stateF = (client ? Api.GetState).mapTo[ConnectionState]
-      val state = Await.result(stateF, defaultTimeout)
-      state.guilds.values.head.presences(BigInt(91377040883744768L).underlying)._2.status shouldBe "idle"
+  "Discord Client" should "Send a message" in {
+    val testFlow = Flow[(HttpRequest, Int)].map { case (req, i) =>
+      val resp = HttpResponse(StatusCodes.OK).withEntity(ContentTypes.`application/json`, "{\"nonce\": \"8778169208853757952\", \"attachments\": [], \"tts\": false, \"embeds\": [], \"timestamp\": \"2015-10-28T22:43:25.802000+00:00\", \"mention_everyone\": false, \"id\": \"109059478082584576\", \"edited_timestamp\": null, \"author\": {\"username\": \"ceezy\", \"discriminator\": \"7914\", \"id\": \"68061741975601152\", \"avatar\": \"1530a9f917209248e49d9dccb8f85049\"}, \"content\": \"test\", \"channel_id\": \"81402706320699392\", \"mentions\": []}")
+      (Success(resp), i)
     }
-  }
+    val client = new AuthenticatedClient(token, testFlow)
 
-  it should "handle a guild add message" in {
-    withTrace("/traces/add_membership.txt") { (queue, client, rest) =>
-      val stateF = (client ? Api.GetState).mapTo[ConnectionState]
-      val state = Await.result(stateF, defaultTimeout)
-      state.guilds.values.head.members.get(BigInt(71671589866831872L).underlying) shouldBe None
-
-      Await.result(Future.sequence(rest map queue.offer), defaultTimeout)
-      eventually {
-        val state2F = (client ? Api.GetState).mapTo[ConnectionState]
-        val state2 = Await.result(state2F, defaultTimeout)
-        val membership = state2.guilds.values.head.members(BigInt(71671589866831872L).underlying)
-        membership.user.username shouldBe "FMendonca"
-      }
-    }
-  }
-
-  private def withTrace(filename: String)(f: (SourceQueue[Message], ActorRef, Iterable[Message]) => Unit) = {
-    val dummyQueue = Source.queue[Message](64, OverflowStrategy.fail).to(Sink.ignore).run()
-    val clientProps = ClientActor.props(dummyQueue, testActor, "test")
-    val sink = Sink.actorSubscriber(clientProps)
-    val src = Source.queue[Message](64, OverflowStrategy.fail)
-    val (queue, client) = src.toMat(sink)(Keep.both).run()
-    val messages = readTrace(filename)
-    val (init, rest) = (messages.head, messages.tail)
-
-    queue.offer(init)
-    expectMsg(Api.Ready)
-
-    f(queue, client, rest)
-  }
-
-  private def readTrace(filename: String): immutable.Iterable[Message] = {
-    immutable.Seq(io.Source.fromInputStream(getClass.getResourceAsStream(filename)).getLines().map(TextMessage(_)).toSeq: _*)
+    val resultF = client.sendMessage(BigInt(81402706320699392L).underlying, "test", Nil)
+    Await.result(resultF, 5 seconds) shouldBe true
   }
 }

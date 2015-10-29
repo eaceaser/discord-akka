@@ -8,7 +8,7 @@ import com.tehasdf.discord.messages._
 import spray.json._
 
 object DiscordProtocol extends DefaultJsonProtocol {
-  implicit def msgF[A: JsonFormat] = jsonFormat2(Msg.apply[A])
+  implicit def wsMsgF[A: JsonFormat] = jsonFormat2(WsClientMessage.apply[A])
 
   implicit val loginF = jsonFormat3(Login)
   implicit object PingFormat extends JsonFormat[Ping] {
@@ -101,4 +101,6 @@ object DiscordProtocol extends DefaultJsonProtocol {
   implicit val messageCreateF = jsonFormat(MessageCreatePayload, "tts", "timestamp", "nonce", "mentions", "mention_everyone", "id", "embeds", "edited_timestamp", "content", "channel_id", "author", "attachments")
 
   implicit val guildMemberAddF = jsonFormat(GuildMemberAddPayload, "user", "roles", "joined_at", "guild_id")
+  implicit val loginInfoF = jsonFormat2(LoginInfo)
+  implicit val msgF = jsonFormat4(Msg)
 }

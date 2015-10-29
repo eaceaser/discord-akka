@@ -70,7 +70,7 @@ class ClientActor(client: SourceQueue[Message], listener: ActorRef, token: Strin
 
   // Login
   val payload = Login(token, Map("$os" -> "Linux", "$browser" -> "discord-akka", "$device" -> "discord-akka", "$referrer" -> "", "$referring_domain" -> ""))
-  val msg = Msg(OpCodes.Login, payload)
+  val msg = WsClientMessage(OpCodes.Login, payload)
   client.offer(TextMessage(msg.toJson.prettyPrint))
 
   when(Init) {
@@ -107,7 +107,7 @@ class ClientActor(client: SourceQueue[Message], listener: ActorRef, token: Strin
   when(Connected) {
     case Event(SendHeartbeat, s: ConnectionState) =>
       val ts = System.currentTimeMillis()
-      client.offer(TextMessage(Msg(OpCodes.Ping, Ping(ts)).toJson.prettyPrint))
+      client.offer(TextMessage(WsClientMessage(OpCodes.Ping, Ping(ts)).toJson.prettyPrint))
       stay
 
     case Event(OnNext(msg: TextMessage), s: ConnectionState) =>
